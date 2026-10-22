@@ -33,6 +33,13 @@
 #'   `version`. If `NULL`, `>=` is used as default for all
 #'   elements. `NA` elements in `compare` are also set to `>=` by
 #'   default.
+#' @param partial Whether to only partially load packages that aren't
+#'   already loaded. If `TRUE`, packages are checked with
+#'   `loadNamespace(partial = TRUE)`, which loads the package code without
+#'   running its `.onLoad()` hook and without keeping the namespace
+#'   loaded. This is useful for packages whose `.onLoad()` hook has side
+#'   effects, such as initializing Python with reticulate. Note that
+#'   imported packages are still fully loaded.
 #' @return `is_installed()` returns `TRUE` if _all_ package names
 #'   provided in `pkg` are installed, `FALSE`
 #'   otherwise. `check_installed()` either doesn't return or returns
@@ -60,13 +67,20 @@
 #' is_installed("utils")
 #' is_installed(c("base", "ggplot5"))
 #' is_installed(c("base", "ggplot5"), version = c(NA, "5.1.0"))
-is_installed <- function(pkg, ..., version = NULL, compare = NULL) {
+is_installed <- function(
+  pkg,
+  ...,
+  version = NULL,
+  compare = NULL,
+  partial = FALSE
+) {
   check_dots_empty0(...)
+  check_bool(partial)
 
   info <- pkg_version_info(pkg, version = version, compare = compare)
-  all(detect_installed(info))
+  all(detect_installed(info, partial = partial))
 }
-detect_installed <- function(info) {
+detect_installed <- function(info, partial = FALSE) {
   # Internal mechanism for unit tests
   hook <- peek_option("rlang:::is_installed_hook")
   if (is_function(hook)) {
@@ -82,12 +96,18 @@ detect_installed <- function(info) {
       # Check that package is on disk in case it's been removed (#1561)
       is_fully_loaded <- is_on_disk(pkg)
 
-      # Check for sealed namespaces to protect against `is_installed()`
-      # being called from user hooks of `pkg` (#1378)
-      is_fully_loaded <-
-        is_fully_loaded &&
-        requireNamespace(pkg, quietly = TRUE) &&
-        env_is_locked(ns_env(pkg))
+      if (partial && !isNamespaceLoaded(pkg)) {
+        # Partially loaded namespaces are neither sealed nor registered,
+        # so only check that loading succeeds (#1924)
+        is_fully_loaded <- is_fully_loaded && is_partially_loadable(pkg)
+      } else {
+        # Check for sealed namespaces to protect against `is_installed()`
+        # being called from user hooks of `pkg` (#1378)
+        is_fully_loaded <-
+          is_fully_loaded &&
+          requireNamespace(pkg, quietly = TRUE) &&
+          env_is_locked(ns_env(pkg))
+      }
     }
 
     if (is_fully_loaded) {
@@ -98,6 +118,16 @@ detect_installed <- function(info) {
   }))
 
   out %||% TRUE
+}
+
+is_partially_loadable <- function(pkg) {
+  tryCatch(
+    {
+      suppressPackageStartupMessages(loadNamespace(pkg, partial = TRUE))
+      TRUE
+    },
+    error = function(cnd) FALSE
+  )
 }
 
 is_on_disk <- function(pkg) {
@@ -216,9 +246,11 @@ check_installed <- function(
   version = NULL,
   compare = NULL,
   action = NULL,
+  partial = FALSE,
   call = caller_env()
 ) {
   check_dots_empty0(...)
+  check_bool(partial, call = call)
 
   # Fast path. Note that if `version` is supplied, this always falls through to the
   # more expensive check.
@@ -234,7 +266,7 @@ check_installed <- function(
   check_action(action)
 
   info <- pkg_version_info(pkg, version = version, compare = compare)
-  needs_install <- !detect_installed(info)
+  needs_install <- !detect_installed(info, partial = partial)
 
   pkg <- info$pkg
   version <- info$ver
@@ -270,7 +302,13 @@ check_installed <- function(
     # again.
     return(with_options(
       "rlib_restart_package_not_found" = FALSE,
-      check_installed(pkg, reason, version = version, call = call)
+      check_installed(
+        pkg,
+        reason,
+        version = version,
+        partial = partial,
+        call = call
+      )
     ))
   }
 

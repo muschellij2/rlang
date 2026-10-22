@@ -2,6 +2,36 @@ test_that("is_installed() properly checks multiple packages", {
   expect_false(is_installed(c("base", "no.notarealpackagename")))
 })
 
+test_that("is_installed() and check_installed() support `partial` (#1924)", {
+  skip_on_cran()
+  local_installed_package(
+    "rlangPartial",
+    ".onLoad <- function(lib, pkg) options(rlang_partial_loaded = TRUE)"
+  )
+  local_options(rlang_partial_loaded = NULL)
+
+  expect_true(is_installed("rlangPartial", partial = TRUE))
+  expect_true(is_installed("rlangPartial (>= 0.0.1)", partial = TRUE))
+  expect_null(check_installed("rlangPartial", partial = TRUE))
+  expect_false(isNamespaceLoaded("rlangPartial"))
+  expect_null(peek_option("rlang_partial_loaded"))
+
+  expect_false(is_installed("rlangPartial (>= 100)", partial = TRUE))
+  expect_false(is_installed("no.notarealpackagename", partial = TRUE))
+
+  expect_true(is_installed("rlangPartial"))
+  expect_true(isNamespaceLoaded("rlangPartial"))
+  expect_true(peek_option("rlang_partial_loaded"))
+  expect_true(is_installed("rlangPartial", partial = TRUE))
+})
+
+test_that("is_installed() and check_installed() check `partial`", {
+  expect_snapshot(error = TRUE, {
+    is_installed("rlang", partial = NA)
+    check_installed("rlang", partial = "yes")
+  })
+})
+
 test_that("check_installed() fails if packages are not installed", {
   local_options(rlang_interactive = FALSE)
   local_error_call(call("foo"))

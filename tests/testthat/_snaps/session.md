@@ -1,3 +1,16 @@
+# is_installed() and check_installed() check `partial`
+
+    Code
+      is_installed("rlang", partial = NA)
+    Condition
+      Error in `is_installed()`:
+      ! `partial` must be `TRUE` or `FALSE`, not `NA`.
+    Code
+      check_installed("rlang", partial = "yes")
+    Condition
+      Error:
+      ! `partial` must be `TRUE` or `FALSE`, not the string "yes".
+
 # check_installed() fails if packages are not installed
 
     Code

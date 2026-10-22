@@ -5,7 +5,7 @@
 \alias{check_installed}
 \title{Are packages installed in any of the libraries?}
 \usage{
-is_installed(pkg, ..., version = NULL, compare = NULL)
+is_installed(pkg, ..., version = NULL, compare = NULL, partial = FALSE)
 
 check_installed(
   pkg,
@@ -14,6 +14,7 @@ check_installed(
   version = NULL,
   compare = NULL,
   action = NULL,
+  partial = FALSE,
   call = caller_env()
 )
 }
@@ -31,6 +32,14 @@ for \code{version}. If supplied, must be the same length as
 \code{version}. If \code{NULL}, \code{>=} is used as default for all
 elements. \code{NA} elements in \code{compare} are also set to \code{>=} by
 default.}
+
+\item{partial}{Whether to only partially load packages that aren't
+already loaded. If \code{TRUE}, packages are checked with
+\code{loadNamespace(partial = TRUE)}, which loads the package code without
+running its \code{.onLoad()} hook and without keeping the namespace
+loaded. This is useful for packages whose \code{.onLoad()} hook has side
+effects, such as initializing Python with reticulate. Note that
+imported packages are still fully loaded.}
 
 \item{reason}{Optional string indicating why is \code{pkg} needed.
 Appears in error messages (if non-interactive) and user prompts
