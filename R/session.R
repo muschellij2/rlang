@@ -96,18 +96,13 @@ detect_installed <- function(info, partial = FALSE) {
       # Check that package is on disk in case it's been removed (#1561)
       is_fully_loaded <- is_on_disk(pkg)
 
-      if (partial && !isNamespaceLoaded(pkg)) {
-        # Partially loaded namespaces are neither sealed nor registered,
-        # so only check that loading succeeds (#1924)
-        is_fully_loaded <- is_fully_loaded && is_partially_loadable(pkg)
-      } else {
-        # Check for sealed namespaces to protect against `is_installed()`
-        # being called from user hooks of `pkg` (#1378)
-        is_fully_loaded <-
-          is_fully_loaded &&
-          requireNamespace(pkg, quietly = TRUE) &&
-          env_is_locked(ns_env(pkg))
-      }
+      # Check for sealed namespaces to protect against `is_installed()`
+      # being called from user hooks of `pkg` (#1378). Partially loaded
+      # namespaces are not kept registered so can't be checked (#1924).
+      is_fully_loaded <-
+        is_fully_loaded &&
+        requireNamespace(pkg, quietly = TRUE, partial = partial) &&
+        ((partial && !isNamespaceLoaded(pkg)) || env_is_locked(ns_env(pkg)))
     }
 
     if (is_fully_loaded) {
@@ -118,16 +113,6 @@ detect_installed <- function(info, partial = FALSE) {
   }))
 
   out %||% TRUE
-}
-
-is_partially_loadable <- function(pkg) {
-  tryCatch(
-    {
-      suppressPackageStartupMessages(loadNamespace(pkg, partial = TRUE))
-      TRUE
-    },
-    error = function(cnd) FALSE
-  )
 }
 
 is_on_disk <- function(pkg) {
